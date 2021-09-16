@@ -35,6 +35,7 @@ if __name__ == '__main__':
                         result_tiles.append(elem)
                         last_ring.append(elem)
         
+        # generate complete graph from ring10
         if(i >= 9):
             tiles = result_tiles
             print(f"{len(tiles)}  tiles created!")

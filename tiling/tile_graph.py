@@ -2,7 +2,9 @@
 # from a given source vertex. BFS(int s)
 # traverses vertices reachable from s.
 from collections import defaultdict
+import time
 import numpy as np
+import multiprocessing as mp
 import itertools
 import math
 import pickle
@@ -174,45 +176,63 @@ class TileGraph:
 
         return new_tiles
 
+    def compute(self, edge):
+        i, j = edge
+        colli_area = tiling_util.intersection_area(self.tiles[i], self.tiles[j])
+        align_length = tiling_util.polygon_align_length(self.tiles[i], self.tiles[j])
+        self.max_align_length = max(align_length, self.max_align_length)
+        edge_feature_back = self.to_edge_feature(colli_area, align_length)
+
+        if align_length > 1e-6 and colli_area < 1e-6:
+            tile_i_align, tile_j_align = tiling_util.polygon_align_type(self.tiles[i], self.tiles[j])
+        else:
+            tile_i_align, tile_j_align = 0, 0
+
+        # reflected feature
+        edge_feature = self.to_edge_feature_new(colli_area, align_length, tile_i_align, tile_j_align, self.tiles[i].id,
+                                                self.tiles[j].id)
+        reflected_feature = self.to_edge_feature_new(colli_area, align_length, tile_j_align, tile_i_align, self.tiles[j].id,
+                                                        self.tiles[i].id)
+        ## assertion of correctness
+        assert edge_feature_back is None or \
+                edge_feature is None or \
+                (edge_feature[0] == edge_feature_back[0] and \
+                edge_feature[1] == edge_feature_back[1] and \
+                edge_feature[2] == tile_i_align and
+                edge_feature[3] == tile_j_align)
+ 
+        if edge_feature is not None:
+            if colli_area < 1e-6:
+                tile_i_align, tile_j_align = tiling_util.polygon_align_type(self.tiles[i], self.tiles[j])
+            return (i, j, edge_feature, reflected_feature, align_length)
+            
+
     def _form__graph(self):
         print("start computing adjacency brick_layouts...")
-        for i, j in itertools.combinations(range(len(self.tiles)), 2):
-            colli_area = tiling_util.intersection_area(self.tiles[i], self.tiles[j])
-            align_length = tiling_util.polygon_align_length(self.tiles[i], self.tiles[j])
-            self.max_align_length = max(align_length, self.max_align_length)
-            edge_feature_back = self.to_edge_feature(colli_area, align_length)
+        edges = [ (i, j) for i, j in itertools.combinations(range(len(self.tiles)), 2) ]
+        
+        # multi processing
+        workers = 16
+        pool = mp.Pool(workers)
+        rl = pool.map(self.compute, edges)
+        pool.close()
+        pool.join()
 
-            if align_length > 1e-6 and colli_area < 1e-6:
-                tile_i_align, tile_j_align = tiling_util.polygon_align_type(self.tiles[i], self.tiles[j])
-            else:
-                tile_i_align, tile_j_align = 0, 0
-
-            # reflected feature
-            edge_feature = self.to_edge_feature_new(colli_area, align_length, tile_i_align, tile_j_align, self.tiles[i].id,
-                                                    self.tiles[j].id)
-            reflected_feature = self.to_edge_feature_new(colli_area, align_length, tile_j_align, tile_i_align, self.tiles[j].id,
-                                                         self.tiles[i].id)
-            ## assertion of correctness
-            assert edge_feature_back is None or \
-                   edge_feature is None or \
-                   (edge_feature[0] == edge_feature_back[0] and \
-                    edge_feature[1] == edge_feature_back[1] and \
-                    edge_feature[2] == tile_i_align and
-                    edge_feature[3] == tile_j_align)
-
-            if edge_feature is not None:
-                if colli_area < 1e-6:
-                    tile_i_align, tile_j_align = tiling_util.polygon_align_type(self.tiles[i], self.tiles[j])
+        for data in rl:
+            if data is not None:
+                i, j, edge_feature, reflected_feature, align_length = data
+                self.max_align_length = max(align_length, self.max_align_length)
                 self._addEdge(i, j, edge_feature)
                 self._addEdge(j, i, reflected_feature)
 
         print("Computing adjacency brick_layouts complete.")
         print(f"Node count: {len(self.tiles)}")
         print(f"Edge count: {len(self.adj_edges + self.colli_edges)}")
+        print(f"Max align: {self.max_align_length}")
 
-        print("Tiles:")
-        for idx, tile in enumerate(self.tiles):
-            print(f":{idx}->{tile.id}")
+        # print("Tiles:")
+        # for idx, tile in enumerate(self.tiles):
+        #     print(f":{idx}->{tile.id}")
 
     @staticmethod
     def to_edge_feature(colli_area, align_length):

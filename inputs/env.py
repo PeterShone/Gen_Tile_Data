@@ -19,7 +19,7 @@ class Environment(object):
         assert os.path.isdir(base_path), "Please set the working directory as the root directory of this project."
         assert os.path.isdir(tiles_dir)
 
-        self.tiles_name = glob.glob(os.path.join(os.path.join(tiles_dir), "*.txt"))
+        self.tiles_name = sorted(glob.glob(os.path.join(os.path.join(tiles_dir), "*.txt")))
         self.proto_tiles = [Tile(Polygon(getSVGShapeAsNp(tile_name)), id = i) for i, tile_name in enumerate(self.tiles_name)]
         if symmetry_tiles:
             symm_tiles = []
